@@ -472,9 +472,4 @@ class RouteBuilder:
 
         return final_route_text, final_docs, reply_markup, place_ids, notification
 
-def create_index() -> None:
-    """
-    Устаревшая функция для создания индекса. В текущей реализации больше ничего не делает.
-    """
-    logging.info("Функция create_index устарела и больше ничего не делает.")
-    pass
+

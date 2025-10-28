@@ -19,7 +19,7 @@ from src.handlers.callbacks import callback_router
 from src.settings.loader import load_dispatcher, load_bot
 from src.handlers.commands import commands_router
 from src.handlers.handlers import handlers_router
-from src.ai.route_logic import create_index
+
 
 
 # --------------------------------------------------------------------------
@@ -38,7 +38,7 @@ async def main() -> None:
     """
     logging.info("Бот запущен")
     load_dotenv()
-    create_index()
+
     dp = load_dispatcher()
     bot = load_bot()
     dp.include_router(commands_router)
