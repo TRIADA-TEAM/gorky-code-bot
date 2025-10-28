@@ -312,12 +312,9 @@ class RouteBuilder:
         food_candidates = []
 
         if explicit_food_request:
-            food_as_places = self._find_food_places(interests)
-            candidate_places.extend(food_as_places)
+            food_candidates = self._find_food_places(interests)
         elif add_food_opportunistically:
             food_candidates = self._find_food_places("кафе")
-
-        candidate_places = self._find_places(interests)
 
         if not candidate_places:
             logging.info("Поиск по тегам не дал результатов. Переключаюсь на семантический поиск RAG.")
