@@ -24,8 +24,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from geopy.location import Location as GeoLocation
 
 from src.ai.rag_fallback import RAGFallback
-from content import messages
-from content import buttons
+from src.content import messages
+from src.content import buttons
 
 
 # --------------------------------------------------------------------------

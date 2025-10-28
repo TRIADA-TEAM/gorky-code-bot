@@ -22,7 +22,7 @@ from geopy.geocoders import Nominatim
 from geopy.location import Location as GeoLocation
 
 from src.ai.route_logic import RouteBuilder
-from content import messages, keyboards, buttons
+from src.content import messages, keyboards, buttons
 from src.settings.classes import UserState
 
 

@@ -38,7 +38,6 @@ guide-bot/
 ├── .env.example              # Пример файла с переменными окружения
 ├── requirements.txt          # Зависимости Python
 ├── main.py                   # Главный файл для запуска бота
-├── documentation.md          # Этот файл
 ├── scripts/                  # Скрипты для подготовки данных
 │   ├── prepare_data.py
 │   ├── prepare_food_data.py

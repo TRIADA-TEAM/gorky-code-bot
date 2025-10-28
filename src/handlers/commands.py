@@ -17,7 +17,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from content import messages, buttons
+from src.content import messages, buttons
 
 
 # --------------------------------------------------------------------------

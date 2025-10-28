@@ -17,7 +17,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 from aiogram.fsm.context import FSMContext
 
-from content import messages, keyboards, buttons
+from src.content import messages, keyboards, buttons
 from src.settings.classes import UserState
 from src.handlers.handlers import _generate_and_send_route
 from src.ai.route_logic import RouteBuilder
