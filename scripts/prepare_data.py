@@ -14,21 +14,39 @@ import pandas as pd
 import json
 import re
 import os
+from typing import List, Dict, Any, Set, Optional
 from snowballstemmer import RussianStemmer
 
 
 # --------------------------------------------------------------------------
-# Инициализация стеммера
+# Инициализация стеммера и константы
 # --------------------------------------------------------------------------
 
 stemmer = RussianStemmer() # Инициализация русского стеммера
+
+# Карта категорий объектов для генерации тегов
+CATEGORY_MAP: Dict[int, List[str]] = {
+    1: ["памятник", "монумент"],
+    2: ["парк", "сад", "общественное пространство"],
+    3: ["макет", "тактильный макет"],
+    4: ["набережная"],
+    5: ["архитектура", "история", "исторический объект"],
+    6: ["культура", "досуг", "кинотеатр"],
+    7: ["музей", "галерея"],
+    8: ["театр"],
+    10: ["искусство", "мозаика", "стрит-арт", "монументальное искусство"],
+    11: ["канатная дорога", "канатка", "канатная"]
+}
+
+DEFAULT_VISIT_TIME_MINUTES = 30 # Время по умолчанию на осмотр места
+EXCLUDE_CATEGORY_ID = 9 # Категория, которую нужно исключить
 
 
 # --------------------------------------------------------------------------
 # Вспомогательные функции
 # --------------------------------------------------------------------------
 
-def normalize_text(text):
+def normalize_text(text: str) -> List[str]:
     """
     Нормализует текстовую строку: приводит к нижнему регистру, извлекает слова
     и стеммирует их.
@@ -40,7 +58,7 @@ def normalize_text(text):
     return [stemmer.stemWord(word) for word in words] # Стемминг каждого слова
 
 
-def generate_tags(row, tag_keywords):
+def generate_tags(row: pd.Series, tag_keywords: Dict[str, List[str]]) -> List[str]:
     """
     Генерирует список тегов для объекта на основе его названия, описания и категории.
 
@@ -48,10 +66,10 @@ def generate_tags(row, tag_keywords):
     :param tag_keywords: Словарь ключевых слов для генерации тегов.
     :return: Список сгенерированных тегов.
     """
-    tags = set()
+    tags: Set[str] = set()
     # Объединяем название и описание для поиска ключевых слов
     text_to_search = str(row.get('title', '')) + ' ' + str(row.get('description', ''))
-    normalized_text_tokens = normalize_text(text_to_search)
+    normalized_text_tokens = set(normalize_text(text_to_search))
 
     # Добавляем теги на основе совпадений ключевых слов
     for tag, keywords in tag_keywords.items():
@@ -59,32 +77,20 @@ def generate_tags(row, tag_keywords):
         if not normalized_keywords.isdisjoint(normalized_text_tokens):
             tags.add(stemmer.stemWord(tag))
 
-    # Карта категорий объектов для генерации тегов
-    category_map = {
-        1: ["памятник", "монумент"],
-        2: ["парк", "сад", "общественное пространство"],
-        3: ["макет", "тактильный макет"],
-        4: ["набережная"],
-        5: ["архитектура", "история", "исторический объект"],
-        6: ["культура", "досуг", "кинотеатр"],
-        7: ["музей", "галерея"],
-        8: ["театр"],
-        10: ["искусство", "мозаика", "стрит-арт", "монументальное искусство"],
-        11: ["канатная дорога", "канатка", "канатная"]
-    }
-    category_id = row.get('category_id')
-    if category_id in category_map:
-        for tag in category_map[category_id]:
+    # Добавляем теги на основе category_id
+    category_id: Optional[int] = row.get('category_id')
+    if category_id in CATEGORY_MAP:
+        for tag in CATEGORY_MAP[category_id]:
             tags.add(stemmer.stemWord(tag))
 
-    return list(tags) if tags else ['достопримечательност'] # Если теги не сгенерированы, добавляем общий тег
+    return list(tags) if tags else [stemmer.stemWord('достопримечательность')] # Если теги не сгенерированы, добавляем общий тег
 
 
 # --------------------------------------------------------------------------
 # Основная функция скрипта
 # --------------------------------------------------------------------------
 
-def main():
+def main() -> None:
     """
     Главная функция скрипта.
     1. Определяет пути к входным и выходным файлам.
@@ -107,7 +113,7 @@ def main():
 
     # Загрузка данных из Excel файла и фильтрация
     df = pd.read_excel(data_source_path)
-    df = df[df['category_id'] != 9].copy() # Исключаем объекты с category_id = 9
+    df = df[df['category_id'] != EXCLUDE_CATEGORY_ID].copy() # Исключаем объекты с category_id = 9
 
     # Извлечение широты и долготы из строки 'coordinate'
     coords = df['coordinate'].str.extract(r'POINT \(([^ ]+) ([^ ]+)\)', expand=True)
@@ -116,7 +122,7 @@ def main():
     df.dropna(subset=['latitude', 'longitude'], inplace=True) # Удаление строк с некорректными координатами
 
     # Определение ключевых слов для генерации тегов
-    tag_keywords = {
+    tag_keywords: Dict[str, List[str]] = {
         "история": ["исторический", "история", "век", "война", "революция", "советский", "империя", "царь", "минин", "пожарский"],
         "памятник": ["памятник", "монумент", "статуя", "бюст"],
         "парк": ["парк", "сквер", "сад", "аллея", "природа", "зелень", "деревья", "цветы", "вода"],
@@ -136,14 +142,14 @@ def main():
     }
 
     # Определение примерного времени посещения для категорий
-    category_times = {
+    category_times: Dict[str, int] = {
         "1": 10, "2": 60, "3": 5, "4": 45, "5": 30, "6": 45, "7": 90, "8": 15, "10": 10, "11": 60
     }
     with open(category_times_path, 'w', encoding='utf-8') as f:
         json.dump(category_times, f, ensure_ascii=False, indent=4)
 
     # Обработка каждого объекта и генерация данных
-    places_data = []
+    places_data: List[Dict[str, Any]] = []
     for _, row in df.iterrows():
         category_id = str(row['category_id'])
         place = {
@@ -155,7 +161,7 @@ def main():
             "title": row.get('title'),
             "category_id": row.get('category_id'),
             "tags": generate_tags(row, tag_keywords), # Генерация тегов
-            "estimated_visit_minutes": category_times.get(category_id, 30) # Время посещения
+            "estimated_visit_minutes": category_times.get(category_id, DEFAULT_VISIT_TIME_MINUTES) # Время посещения
         }
         places_data.append(place)
 
@@ -164,7 +170,7 @@ def main():
         json.dump(places_data, f, ensure_ascii=False, indent=4)
 
     # Определение и стемминг синонимов для объектов
-    raw_synonyms = {
+    raw_synonyms: Dict[str, List[str]] = {
         "памятник": ["монумент", "статуя"],
         "парк": ["сквер", "сад", "природа", "пикник", "трава", "деревья"],
         "музей": ["галерея", "выставка", "картина"],
@@ -182,7 +188,7 @@ def main():
         "канатная дорога": ["канатка", "канатная дорога", "канатная"]
     }
     
-    stemmed_synonyms = {}
+    stemmed_synonyms: Dict[str, str] = {}
     for key, values in raw_synonyms.items():
         stemmed_key = stemmer.stemWord(key)
         stemmed_values = [stemmer.stemWord(v) for v in values]

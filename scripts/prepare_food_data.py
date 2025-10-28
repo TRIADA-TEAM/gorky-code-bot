@@ -14,6 +14,7 @@ import pandas as pd
 import json
 import re
 import os
+from typing import List, Dict, Any, Set
 from snowballstemmer import RussianStemmer
 
 
@@ -24,7 +25,7 @@ from snowballstemmer import RussianStemmer
 stemmer = RussianStemmer() # Инициализация русского стеммера
 
 # Карта категорий заведений для генерации тегов
-CATEGORY_MAP = {
+CATEGORY_MAP: Dict[int, List[str]] = {
     1: ["ресторан"],
     2: ["кафе"],
     3: ["фастфуд"],
@@ -32,12 +33,14 @@ CATEGORY_MAP = {
     5: ["паб"]
 }
 
+DEFAULT_VISIT_TIME_FOOD = 45 # Время по умолчанию на посещение заведения
+
 
 # --------------------------------------------------------------------------
 # Вспомогательные функции
 # --------------------------------------------------------------------------
 
-def normalize_text(text):
+def normalize_text(text: str) -> List[str]:
     """
     Нормализует текстовую строку: приводит к нижнему регистру, извлекает слова
     и стеммирует их.
@@ -49,7 +52,7 @@ def normalize_text(text):
     return [stemmer.stemWord(word) for word in words] # Стемминг каждого слова
 
 
-def generate_tags(row, tag_keywords):
+def generate_tags(row: pd.Series, tag_keywords: Dict[str, List[str]]) -> List[str]:
     """
     Генерирует список тегов для заведения на основе его названия, описания и категории.
 
@@ -57,10 +60,10 @@ def generate_tags(row, tag_keywords):
     :param tag_keywords: Словарь ключевых слов для генерации тегов.
     :return: Список сгенерированных тегов.
     """
-    tags = set()
+    tags: Set[str] = set()
     # Объединяем название и описание для поиска ключевых слов
     text_to_search = str(row.get('title', '')) + ' ' + str(row.get('description', ''))
-    normalized_text_tokens = normalize_text(text_to_search)
+    normalized_text_tokens = set(normalize_text(text_to_search))
 
     # Добавляем теги на основе совпадений ключевых слов
     for tag, keywords in tag_keywords.items():
@@ -69,7 +72,7 @@ def generate_tags(row, tag_keywords):
             tags.add(stemmer.stemWord(tag))
     
     # Добавляем теги на основе category_id
-    category_id = row.get('category_id')
+    category_id: Optional[int] = row.get('category_id')
     if category_id in CATEGORY_MAP:
         for tag in CATEGORY_MAP[category_id]:
             tags.add(stemmer.stemWord(tag))
@@ -82,7 +85,7 @@ def generate_tags(row, tag_keywords):
 # Основная функция скрипта
 # --------------------------------------------------------------------------
 
-def main():
+def main() -> None:
     """
     Главная функция скрипта.
     1. Определяет пути к входным и выходным файлам.
@@ -118,7 +121,7 @@ def main():
         json.dump(CATEGORY_MAP, f, ensure_ascii=False, indent=4)
 
     # Определение ключевых слов для генерации тегов
-    tag_keywords = {
+    tag_keywords: Dict[str, List[str]] = {
         "ресторан": ["ресторан"],
         "кафе": ["кафе", "еда"],
         "бар": ["бар", "паб", "рюмочная"],
@@ -149,14 +152,14 @@ def main():
     }
 
     # Определение примерного времени посещения для категорий
-    category_times = {
+    category_times: Dict[str, int] = {
         "1": 90, "2": 60, "3": 45, "4": 90, "5": 60
     }
     with open(category_times_path, 'w', encoding='utf-8') as f:
         json.dump(category_times, f, ensure_ascii=False, indent=4)
 
     # Обработка каждого заведения и генерация данных
-    places_data = []
+    places_data: List[Dict[str, Any]] = []
     for _, row in df.iterrows():
         category_id = str(row['category_id'])
         place = {
@@ -168,7 +171,7 @@ def main():
             "title": row.get('title'),
             "category_id": row.get('category_id'),
             "tags": generate_tags(row, tag_keywords), # Генерация тегов
-            "estimated_visit_minutes": category_times.get(category_id, 45) # Время посещения
+            "estimated_visit_minutes": category_times.get(category_id, DEFAULT_VISIT_TIME_FOOD) # Время посещения
         }
         places_data.append(place)
 
@@ -177,7 +180,7 @@ def main():
         json.dump(places_data, f, ensure_ascii=False, indent=4)
 
     # Определение и стемминг синонимов для заведений
-    raw_synonyms = {
+    raw_synonyms: Dict[str, List[str]] = {
         "ресторан": ["гастрономическая", "европейская", "азиатская", "кухня", "вкусно", "дорого"],
         "кафе": ["кофейня", "поесть", "вкусно", "покушать", "недорого"],
         "паб": ["пиво", "выпить", "пить", "алкоголь", "нажраться", "набухаться", "бухнуть", "пить"],
@@ -193,7 +196,7 @@ def main():
         "чай": ["чайная", "попить", "пить"]
     }
     
-    stemmed_synonyms = {}
+    stemmed_synonyms: Dict[str, str] = {}
     for key, values in raw_synonyms.items():
         stemmed_key = stemmer.stemWord(key)
         stemmed_values = [stemmer.stemWord(v) for v in values]

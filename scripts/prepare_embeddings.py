@@ -15,6 +15,7 @@ import numpy as np
 import os
 import pandas as pd
 from sentence_transformers import SentenceTransformer
+from typing import List, Dict, Any
 
 
 # --------------------------------------------------------------------------
@@ -22,13 +23,14 @@ from sentence_transformers import SentenceTransformer
 # --------------------------------------------------------------------------
 
 EMBEDDING_MODEL = 'all-MiniLM-L6-v2' # Название предобученной модели для создания эмбеддингов
+EXCLUDE_CATEGORY_ID = 9 # Категория, которую нужно исключить из данных
 
 
 # --------------------------------------------------------------------------
 # Основная функция скрипта
 # --------------------------------------------------------------------------
 
-def create_embeddings():
+def create_embeddings() -> None:
     """
     Главная функция для создания эмбеддингов.
     1. Определяет пути к исходным данным и файлам для сохранения эмбеддингов и ID.
@@ -60,19 +62,19 @@ def create_embeddings():
         return
 
     print("Фильтрация данных в соответствии с требованиями RAG...")
-    df = df[df['category_id'] != 9].copy() # Исключаем объекты с category_id = 9
+    df = df[df['category_id'] != EXCLUDE_CATEGORY_ID].copy() # Исключаем объекты с category_id = 9
 
     # Определение текстовых столбцов для эмбеддинга
-    all_cols = df.columns.tolist()
-    cols_to_exclude = ['id', 'category_id', 'url', 'address', 'coordinate']
-    text_cols = [col for col in all_cols if col not in cols_to_exclude]
+    all_cols: List[str] = df.columns.tolist()
+    cols_to_exclude: List[str] = ['id', 'category_id', 'url', 'address', 'coordinate']
+    text_cols: List[str] = [col for col in all_cols if col not in cols_to_exclude]
     print(f"Используемые столбцы для текста эмбеддингов: {text_cols}")
 
     # Объединение текстовых столбцов в одну строку для каждого объекта
     df['text_for_embedding'] = df[text_cols].fillna('').astype(str).agg('; '.join, axis=1)
 
-    texts_to_embed = df['text_for_embedding'].tolist()
-    place_ids = df['id'].tolist()
+    texts_to_embed: List[str] = df['text_for_embedding'].tolist()
+    place_ids: List[int] = df['id'].tolist()
 
     if not texts_to_embed:
         print("Нет текстовых данных для создания эмбеддингов.")
@@ -82,7 +84,7 @@ def create_embeddings():
     model = SentenceTransformer(EMBEDDING_MODEL)
 
     print(f"Генерация эмбеддингов для {len(texts_to_embed)} мест... (Это может занять некоторое время)")
-    embeddings = model.encode(texts_to_embed, show_progress_bar=True) # Генерация эмбеддингов
+    embeddings: np.ndarray = model.encode(texts_to_embed, show_progress_bar=True) # Генерация эмбеддингов
 
     print(f"Сохранение эмбеддингов в {embeddings_path}")
     np.save(embeddings_path, embeddings) # Сохранение эмбеддингов в файл .npy

@@ -17,6 +17,7 @@ import os
 import faiss
 from sentence_transformers import SentenceTransformer
 import logging
+from typing import List, Dict, Any, Optional
 
 
 # --------------------------------------------------------------------------
@@ -35,19 +36,19 @@ class RAGFallback:
     Класс для реализации фолбэка на основе RAG (Retrieval-Augmented Generation).
     Используется для семантического поиска мест, когда обычный поиск по тегам не дает результатов.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Инициализация RAGFallback. Загружает модель эмбеддингов, данные о местах,
         их ID и создает FAISS индекс.
         """
-        self.model = None
-        self.places_data = []
-        self.place_ids = []
-        self.embeddings = None
-        self.index = None
+        self.model: Optional[SentenceTransformer] = None
+        self.places_data: List[Dict[str, Any]] = []
+        self.place_ids: List[int] = []
+        self.embeddings: Optional[np.ndarray] = None
+        self.index: Optional[faiss.IndexFlatL2] = None
         self._load_all_data() # Загрузка всех необходимых данных при инициализации
 
-    def _load_all_data(self):
+    def _load_all_data(self) -> None:
         """
         Загружает данные о местах, их эмбеддинги и ID из файлов.
         Инициализирует модель SentenceTransformer и создает FAISS индекс для поиска.
@@ -70,7 +71,7 @@ class RAGFallback:
             with open(ids_path, 'r', encoding='utf-8') as f:
                 self.place_ids = json.load(f) # Загрузка ID мест
 
-            self.places_map = {place['id']: place for place in self.places_data} # Создание карты ID -> место
+            self.places_map: Dict[int, Dict[str, Any]] = {place['id']: place for place in self.places_data} # Создание карты ID -> место
 
             if self.embeddings is not None:
                 dimension = self.embeddings.shape[1]
@@ -81,11 +82,13 @@ class RAGFallback:
         except FileNotFoundError as e:
             logging.error(f"Данные для фолбэка RAG не найдены: {e}. Система фолбэка будет отключена.")
             self.index = None # Отключение индекса при ошибке
+            self.model = None # Отключение модели при ошибке
         except Exception as e:
             logging.error(f"Произошла ошибка при загрузке системы фолбэка RAG: {e}")
             self.index = None # Отключение индекса при ошибке
+            self.model = None # Отключение модели при ошибке
 
-    def find_places_by_semantic_search(self, query: str, top_k: int = 5) -> list:
+    def find_places_by_semantic_search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """
         Выполняет семантический поиск мест по заданному запросу.
 
@@ -102,9 +105,9 @@ class RAGFallback:
             query_embedding = self.model.encode([query]) # Получение эмбеддинга запроса
             distances, indices = self.index.search(query_embedding.astype('float32'), top_k) # Поиск ближайших векторов
 
-            found_places = []
+            found_places: List[Dict[str, Any]] = []
             for i in indices[0]:
-                if i < len(self.place_ids):
+                if 0 <= i < len(self.place_ids):
                     place_id = self.place_ids[i]
                     place = self.places_map.get(place_id)
                     if place:

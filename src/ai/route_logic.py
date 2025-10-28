@@ -17,10 +17,11 @@ import re
 import requests
 from geopy.distance import geodesic
 import pandas as pd
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Any, Optional, Set
 from snowballstemmer import RussianStemmer
 from dotenv import load_dotenv
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from geopy.location import Location as GeoLocation
 
 from src.ai.rag_fallback import RAGFallback
 from content import messages
@@ -45,6 +46,9 @@ FOOD_CATEGORY_TIMES_PATH = os.path.join(DATA_DIR, 'food_category_times.json')
 FOOD_CATEGORIES_PATH = os.path.join(DATA_DIR, 'food_categories.json')
 
 AVG_WALKING_SPEED_KMH = 4.5 # Средняя скорость ходьбы в км/ч
+DEFAULT_VISIT_TIME_MINUTES = 30 # Время по умолчанию на осмотр места
+DEFAULT_FOOD_VISIT_TIME_MINUTES = 45 # Время по умолчанию на посещение заведения
+MAX_ROUTE_POINTS_FOR_2GIS_MAP = 8 # Максимальное количество точек для отображения на карте 2GIS
 
 
 # --------------------------------------------------------------------------
@@ -62,20 +66,20 @@ class RouteBuilder:
         Инициализация RouteBuilder. Загружает все необходимые данные и
         инициализирует стеммер и RAG-систему.
         """
-        self.places = []
-        self.food_places = []
-        self.synonyms = {}
-        self.food_keywords = set()
-        self.category_times = {}
-        self.food_categories = {}
+        self.places: List[Dict[str, Any]] = []
+        self.food_places: List[Dict[str, Any]] = []
+        self.synonyms: Dict[str, str] = {}
+        self.food_keywords: Set[str] = set()
+        self.category_times: Dict[str, int] = {}
+        self.food_categories: Dict[str, List[str]] = {}
         self.stemmer = RussianStemmer() # Стеммер для обработки русских слов
-        self.gis_api_key = os.getenv("2GIS_API_KEY") # Ключ API 2GIS
+        self.gis_api_key: Optional[str] = os.getenv("2GIS_API_KEY") # Ключ API 2GIS
         self.rag_fallback = RAGFallback() # Система RAG для семантического поиска
         self._load_data() # Загрузка данных при инициализации
         if not self.gis_api_key:
             logging.warning("2GIS_API_KEY не найден в файле .env. Реальные дорожные расстояния будут недоступны.")
 
-    def _load_data(self):
+    def _load_data(self) -> None:
         """
         Загружает данные из JSON файлов: места, заведения, синонимы, время категорий и категории еды.
         Обрабатывает ошибки FileNotFoundError и JSONDecodeError.
@@ -104,7 +108,7 @@ class RouteBuilder:
         except json.JSONDecodeError as e:
             logging.error(f"Ошибка декодирования JSON из файлов данных: {e}. Система поиска не будет работать.")
 
-    def get_place_by_id(self, place_id: int):
+    def get_place_by_id(self, place_id: int) -> Optional[Dict[str, Any]]:
         """
         Возвращает информацию о месте по его ID.
 
@@ -116,7 +120,7 @@ class RouteBuilder:
                 return place
         return None
 
-    def _normalize_interests(self, interests_str: str) -> set:
+    def _normalize_interests(self, interests_str: str) -> Set[str]:
         """
         Нормализует строку интересов пользователя: токенизирует, стеммирует и заменяет синонимы.
 
@@ -124,14 +128,14 @@ class RouteBuilder:
         :return: Множество нормализованных ключевых слов.
         """
         tokens = re.findall(r'\w+', interests_str.lower()) # Извлечение слов
-        stemmed_tokens = set()
+        stemmed_tokens: Set[str] = set()
         for token in tokens:
             stemmed_token = self.stemmer.stemWord(token) # Стемминг слова
             root_word = self.synonyms.get(stemmed_token, stemmed_token) # Замена на синоним, если есть
             stemmed_tokens.add(root_word)
         return stemmed_tokens
 
-    def _find_places(self, interests: str) -> list:
+    def _find_places(self, interests: str) -> List[Dict[str, Any]]:
         """
         Находит места, соответствующие интересам пользователя, на основе тегов.
         Присваивает баллы местам и возвращает отсортированный список.
@@ -143,9 +147,9 @@ class RouteBuilder:
         if not normalized_interests:
             return []
         
-        scored_places = []
+        scored_places: List[Dict[str, Any]] = []
         for place in self.places:
-            place_tags = set(place.get('tags', []))
+            place_tags: Set[str] = set(place.get('tags', []))
             score = len(normalized_interests.intersection(place_tags)) # Количество совпадений тегов
             
             # Корректировка баллов для специфических тегов
@@ -161,7 +165,7 @@ class RouteBuilder:
         scored_places.sort(key=lambda x: x['score'], reverse=True) # Сортировка по убыванию баллов
         return [sp['place'] for sp in scored_places[:30]] # Возвращаем до 30 наиболее релевантных мест
 
-    def _find_food_places(self, interests: str) -> list:
+    def _find_food_places(self, interests: str) -> List[Dict[str, Any]]:
         """
         Находит заведения общественного питания, соответствующие интересам пользователя.
 
@@ -172,9 +176,9 @@ class RouteBuilder:
         if not normalized_interests:
             return self.food_places # Если интересы не указаны, возвращаем все заведения
 
-        scored_places = []
+        scored_places: List[Dict[str, Any]] = []
         for place in self.food_places:
-            place_tags = set(place.get('tags', []))
+            place_tags: Set[str] = set(place.get('tags', []))
             score = len(normalized_interests.intersection(place_tags))
 
             if score > 0:
@@ -183,7 +187,7 @@ class RouteBuilder:
         scored_places.sort(key=lambda x: x['score'], reverse=True)
         return [sp['place'] for sp in scored_places]
 
-    def _get_geodesic_travel_info(self, point1, point2) -> Tuple[float, float]:
+    def _get_geodesic_travel_info(self, point1: Tuple[float, float], point2: Tuple[float, float]) -> Tuple[float, float]:
         """
         Рассчитывает геодезическое расстояние и время в пути между двумя точками.
 
@@ -195,7 +199,14 @@ class RouteBuilder:
         duration_min = (distance_km / AVG_WALKING_SPEED_KMH) * 60
         return duration_min, distance_km
 
-    def _optimize_route_by_geodesic(self, places: list, start_location, time_limit_hours: int, food_candidates: list, explicit_food_request: bool) -> list:
+    def _optimize_route_by_geodesic(
+        self,
+        places: List[Dict[str, Any]],
+        start_location: GeoLocation,
+        time_limit_hours: int,
+        food_candidates: List[Dict[str, Any]],
+        explicit_food_request: bool
+    ) -> List[Dict[str, Any]]:
         """
         Оптимизирует маршрут, выбирая места, ближайшие к текущей точке, с учетом временных ограничений.
         Также учитывает возможность включения остановок для еды.
@@ -210,9 +221,9 @@ class RouteBuilder:
         time_limit_minutes = time_limit_hours * 60
         current_location = (start_location.latitude, start_location.longitude)
         remaining_places = places.copy()
-        optimal_route = []
-        current_time = 0
-        time_since_last_food_stop = 0
+        optimal_route: List[Dict[str, Any]] = []
+        current_time = 0.0
+        time_since_last_food_stop = 0.0
 
         # Время, через которое нужно искать место для еды
         food_stop_wait_time = 30 if explicit_food_request else 180
@@ -227,13 +238,13 @@ class RouteBuilder:
                 )
                 
                 travel_time_to_food, _ = self._get_geodesic_travel_info(current_location, (nearest_food_place['latitude'], nearest_food_place['longitude']))
-                visit_time_food = nearest_food_place.get('estimated_visit_minutes', 45)
+                visit_time_food = nearest_food_place.get('estimated_visit_minutes', DEFAULT_FOOD_VISIT_TIME_MINUTES)
 
                 if current_time + travel_time_to_food + visit_time_food <= time_limit_minutes:
                     optimal_route.append(nearest_food_place)
                     current_time += travel_time_to_food + visit_time_food
                     current_location = (nearest_food_place['latitude'], nearest_food_place['longitude'])
-                    time_since_last_food_stop = 0
+                    time_since_last_food_stop = 0.0
                     food_candidates.remove(nearest_food_place)
                     continue # Продолжаем цикл, чтобы найти следующее место
 
@@ -244,7 +255,7 @@ class RouteBuilder:
             )
             
             travel_time_to_nearest, _ = self._get_geodesic_travel_info(current_location, (nearest_place['latitude'], nearest_place['longitude']))
-            visit_time = nearest_place.get('estimated_visit_minutes', 30)
+            visit_time = nearest_place.get('estimated_visit_minutes', DEFAULT_VISIT_TIME_MINUTES)
 
             # Если место можно посетить в рамках оставшегося времени
             if current_time + travel_time_to_nearest + visit_time <= time_limit_minutes:
@@ -269,7 +280,8 @@ class RouteBuilder:
         num_segments = len(final_route_points) - 1
         if not self.gis_api_key or num_segments < 1:
             # Если API ключ не указан или маршрут состоит из одной точки, используем геодезические расчеты
-            durations, distances = [], []
+            durations: List[float] = []
+            distances: List[float] = []
             for i in range(num_segments):
                 d, dist = self._get_geodesic_travel_info(final_route_points[i], final_route_points[i+1])
                 durations.append(d)
@@ -289,7 +301,7 @@ class RouteBuilder:
             data = response.json()
 
             # Парсинг ответа 2GIS API
-            dist_matrix = [[(float('inf'), float('inf'))] * len(final_route_points) for _ in range(len(final_route_points))]
+            dist_matrix: List[List[Tuple[float, float]]] = [[(float('inf'), float('inf'))] * len(final_route_points) for _ in range(len(final_route_points))]
             for route in data['routes']:
                 dist_matrix[route['source_id']][route['target_id']] = (route['duration'] / 60, route['distance'] / 1000)
 
@@ -317,7 +329,7 @@ class RouteBuilder:
             distances.append(dist)
         return durations, distances
 
-    def _format_route_text(self, route_places: list, start_location, retrieved_docs: pd.DataFrame) -> Tuple[str, InlineKeyboardMarkup]:
+    def _format_route_text(self, route_places: List[Dict[str, Any]], start_location: GeoLocation, retrieved_docs: pd.DataFrame) -> Tuple[str, InlineKeyboardMarkup]:
         """
         Форматирует текстовое представление маршрута и создает Inline-клавиатуру.
 
@@ -330,19 +342,19 @@ class RouteBuilder:
             return messages.ERROR_CANNOT_CREATE_ROUTE, InlineKeyboardMarkup(inline_keyboard=[[]])
 
         # Подготовка точек для расчета маршрута через 2GIS API
-        final_points = [(start_location.latitude, start_location.longitude)] + [(p['latitude'], p['longitude']) for p in route_places]
+        final_points: List[Tuple[float, float]] = [(start_location.latitude, start_location.longitude)] + [(p['latitude'], p['longitude']) for p in route_places]
         gis_travel_times, gis_travel_distances = self._get_route_travel_times_from_2gis(final_points)
 
         text = messages.ROUTE_HEADER
         
         logging.info("Сравнение времени в пути (по прямой vs 2GIS)")
-        total_duration_minutes = 0
-        total_distance_km = 0
+        total_duration_minutes = 0.0
+        total_distance_km = 0.0
         
         for i, place in enumerate(route_places):
             gis_time = gis_travel_times[i]
             gis_dist = gis_travel_distances[i]
-            visit_time = place.get('estimated_visit_minutes', 30)
+            visit_time = place.get('estimated_visit_minutes', DEFAULT_VISIT_TIME_MINUTES)
             
             total_duration_minutes += gis_time + visit_time
             total_distance_km += gis_dist
@@ -376,19 +388,19 @@ class RouteBuilder:
                 )
             
         # Добавление сводки по маршруту
-        hours, minutes = divmod(total_duration_minutes, 60)
-        summary = messages.ROUTE_SUMMARY.format(hours=int(hours), minutes=int(minutes), distance=total_distance_km)
+        hours, minutes = divmod(int(total_duration_minutes), 60)
+        summary = messages.ROUTE_SUMMARY.format(hours=hours, minutes=minutes, distance=total_distance_km)
         text += summary
 
         # Формирование кнопок для Inline-клавиатуры
-        main_buttons = [[buttons.show_all_descriptions_button]]
+        main_buttons: List[List[InlineKeyboardButton]] = [[buttons.show_all_descriptions_button]]
 
         # Добавление кнопки для открытия карты 2GIS, если есть места
-        if retrieved_docs is not None and not retrieved_docs.empty:
+        if not retrieved_docs.empty:
             docs_for_map = retrieved_docs
-            if len(retrieved_docs) > 8:
+            if len(retrieved_docs) > MAX_ROUTE_POINTS_FOR_2GIS_MAP:
                 logging.warning(messages.MAP_POINT_LIMIT_WARNING)
-                docs_for_map = retrieved_docs.head(8)
+                docs_for_map = retrieved_docs.head(MAX_ROUTE_POINTS_FOR_2GIS_MAP)
 
             start_point = f"{start_location.longitude},{start_location.latitude}"
             route_points = [f"{row['longitude']},{row['latitude']}" for _, row in docs_for_map.iterrows()]
@@ -402,7 +414,12 @@ class RouteBuilder:
 
         return text, reply_markup
 
-    async def generate_route(self, interests: str, time_str: str, location) -> Tuple[str, pd.DataFrame, InlineKeyboardMarkup, List[int], str | None]:
+    async def generate_route(
+        self,
+        interests: str,
+        time_str: str,
+        location: GeoLocation
+    ) -> Tuple[str, pd.DataFrame, InlineKeyboardMarkup, List[int], Optional[str]]:
         """
         Основная функция для генерации маршрута.
 
@@ -411,7 +428,7 @@ class RouteBuilder:
         :param location: Начальное местоположение пользователя.
         :return: Кортеж: (текст маршрута, DataFrame с местами, InlineKeyboardMarkup, список ID мест, уведомление).
         """
-        notification = None
+        notification: Optional[str] = None
         if not self.places:
             return messages.ERROR_SEARCH_SYSTEM_INIT, pd.DataFrame(), InlineKeyboardMarkup(inline_keyboard=[[]]), [], None
 
@@ -428,7 +445,7 @@ class RouteBuilder:
         add_food_opportunistically = time_limit_hours >= 3
 
         candidate_places = self._find_places(interests)
-        food_candidates = []
+        food_candidates: List[Dict[str, Any]] = []
 
         if explicit_food_request:
             food_candidates = self._find_food_places(interests)
@@ -441,13 +458,13 @@ class RouteBuilder:
             candidate_places = self.rag_fallback.find_places_by_semantic_search(interests)
 
         if not candidate_places:
-            return messages.ERROR_NO_PLACES_FOUND, pd.DataFrame(), InlineKeyboardMarkup(inline_keyboard=[[]]), [], None
+            return messages.ERROR_NO_PLACES_FOUND, pd.DataFrame(), InlineKeyboardMarkup(inline_keyboard=[[]]), [], notification
 
         # Оптимизация маршрута
         final_route_places = self._optimize_route_by_geodesic(candidate_places, location, time_limit_hours, food_candidates, explicit_food_request)
 
         if not final_route_places:
-            return messages.ERROR_CANNOT_CREATE_ROUTE, pd.DataFrame(), InlineKeyboardMarkup(inline_keyboard=[[]]), [], None
+            return messages.ERROR_CANNOT_CREATE_ROUTE, pd.DataFrame(), InlineKeyboardMarkup(inline_keyboard=[[]]), [], notification
 
         final_docs = pd.DataFrame(final_route_places)
         final_route_text, reply_markup = self._format_route_text(final_route_places, location, final_docs)
@@ -455,7 +472,7 @@ class RouteBuilder:
 
         return final_route_text, final_docs, reply_markup, place_ids, notification
 
-def create_index():
+def create_index() -> None:
     """
     Устаревшая функция для создания индекса. В текущей реализации больше ничего не делает.
     """
