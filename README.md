@@ -57,6 +57,7 @@ guide-bot/
 │   │   ├── commands.py
 │   │   └── callbacks.py
 │   └── content/              # Текстовый контент и клавиатуры
+│       ├── buttons.py
 │       ├── messages.py
 │       └── keyboards.py
 └── ...
@@ -79,7 +80,7 @@ guide-bot/
 
 2.  **`scripts/prepare_food_data.py`**:
     - Аналогично обрабатывает `food_places.xlsx`.
-    - Генерирует `src/data/food_places.json`, `src/data/food_synonyms.json` и `src/data/food_category_times.json`.
+    - Генерирует `src/data/food_places.json`, `src/data/food_synonyms.json`, `src/data/food_categories.json` и `src/data/food_category_times.json`.
     - Присваивает всем заведениям тег `'ед'` для идентификации.
 
 3.  **`scripts/prepare_embeddings.py`**:
@@ -92,7 +93,7 @@ guide-bot/
 1. **Загрузка необходимых json файлов.**
 2. **Токенизация и расширение запроса:** Интересы пользователя разбиваются на слова (токены), которые затем расширяются синонимами из `synonyms.json`.
 3. **Поиск кандидатов:**
-    - **`_find_places`**: Выполняется поиск по тегам в `places.json`. Места, у которых есть совпадения по тегам, становятся кандидатами. Внедрена система баллов, позволяющая подрибать места по соответствующим интересам пользователя.
+    - **`_find_places`**: Выполняется поиск по тегам в `places.json`. Места, у которых есть совпадения по тегам, становятся кандидатами. Внедрена система баллов, позволяющая подбирать места по соответствующим интересам пользователя.
     - **`_find_food_places`**: Если нужно, выполняется аналогичный поиск по `food_places.json`.
 4.  **Семантический Fallback (`src/ai/rag_fallback.py`):**
     - Если `_find_places` не нашел ни одного кандидата, управление передается в `find_places_by_rag`.
@@ -125,7 +126,7 @@ guide-bot/
 1.  **Клонируйте репозиторий:**
     ```bash
     git clone <repository_url>
-    cd guide-bot
+    cd gorky-code-bot
     ```
 
 2.  **Создайте и активируйте виртуальное окружение:**
@@ -145,7 +146,7 @@ guide-bot/
     - Впишите в `.env` ваш токен для телеграм-бота и токен для 2GIS API.
     ```ini
     BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
-    GIS_TOKEN="YOUR_2GIS_API_TOKEN"
+    2GIS_TOKEN="YOUR_2GIS_API_TOKEN"
     ```
 
 5.  **Подготовьте данные:**
