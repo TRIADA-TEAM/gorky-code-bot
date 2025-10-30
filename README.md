@@ -146,7 +146,7 @@ guide-bot/
     - Впишите в `.env` ваш токен для телеграм-бота и токен для 2GIS API.
     ```ini
     BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
-    2GIS_TOKEN="YOUR_2GIS_API_TOKEN"
+    2GIS_API_KEY="YOUR_2GIS_API_KEY"
     ```
 
 5.  **Подготовьте данные:**
